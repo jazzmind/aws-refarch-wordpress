@@ -63,6 +63,13 @@ Parameters:
   Vpc:
     Description: Select an existing Vpc
     Type: AWS::EC2::VPC::Id
+  WPMultisiteBoolean:
+    AllowedValues:
+      - true
+      - false
+    Default: false
+    Description: Enable Multisite, this will modify SQL to set domain and add multisite settings in wp-config.
+    Type: String
 
 Conditions:
 
@@ -108,6 +115,8 @@ Conditions:
     - !Condition NumberOfSubnets5
     - !Condition NumberOfSubnets6
   Subnet5: !Condition NumberOfSubnets6
+  EnableMultisite:
+      !Equals [ true, !Ref WPMultisiteBoolean ]
 
 Resources:
   
@@ -174,6 +183,7 @@ Resources:
       HealthCheckTimeoutSeconds: 5
       Port: 80
       Protocol: HTTP
+      Matcher: !If [ EnableMultisite, '200,301', '200' ]
       Tags:
       - Key: Name
         Value: !Join [ '', [ 'Public ALB / ', !Ref 'AWS::StackName' ] ]

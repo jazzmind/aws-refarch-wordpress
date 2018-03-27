@@ -310,6 +310,17 @@ Parameters:
     AllowedPattern: ^$|(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
     Description: '[ Optional ] The main domain name of the WordPress site (e.g. example.com). Leave empty to use the ALB DNS name for the WordPress site.'
     Type: String
+  WPMultisiteBoolean:
+    AllowedValues:
+      - true
+      - false
+    Default: false
+    Description: Enable Multisite, this will modify SQL to set domain and add multisite settings in wp-config.
+    Type: String
+  WPPrefix:
+    Default: wp_
+    Description: The WordPress database table prefix.
+    Type: String
   WPLocale:
     Description: The main language of the WordPress site, as per https://codex.WordPress.org/Installing_WordPress_in_Your_Language. The default is 'en_GB'.
     Type: String
@@ -381,6 +392,8 @@ Conditions:
   Subnet5: !Condition NumberOfSubnets6
   NoWPDomainName:
     !Equals [ '', !Ref WPDomainName ]
+  EnableMultisite:
+    !Equals [ true, !Ref WPMultisiteBoolean ]
 
 Mappings:
 
@@ -616,13 +629,24 @@ Resources:
                     "   if ! $(wp core is-installed --allow-root); then\n",
                     "       wp core download --version='", !Ref WPVersion, "' --locale='", !Ref WPLocale, "' --allow-root\n",  
                     "       wp core config --dbname='", !Ref DatabaseName, "' --dbuser='", !Ref DatabaseMasterUsername, "' --dbpass='", !Ref DatabaseMasterPassword, "' --dbhost='", !Ref DatabaseClusterEndpointAddress, "' --dbprefix=wp_ --allow-root\n",
-                    "       wp core install --url=", !If [ NoWPDomainName, !Ref PublicAlbHostname, !Join [ "", [ "'http://www.", !Ref WPDomainName, "'" ] ] ], " --title='", !Ref WPTitle, "' --admin_user='", !Ref WPAdminUsername, "' --admin_password='", !Ref WPAdminPassword, "' --admin_email='", !Ref WPAdminEmail, "' --skip-email --allow-root\n",
+                    "       wp core install --url=", !If [ NoWPDomainName, !Ref PublicAlbHostname, !Join [ "", [ "'http://", !Ref WPDomainName, "'" ] ] ], " --title='", !Ref WPTitle, "' --admin_user='", !Ref WPAdminUsername, "' --admin_password='", !Ref WPAdminPassword, "' --admin_email='", !Ref WPAdminEmail, "' --skip-email --allow-root\n",
                     "       wp plugin install w3-total-cache\n",
                     "       sed -i \"/$table_prefix = 'wp_';/ a \\define('WP_HOME', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       sed -i \"/$table_prefix = 'wp_';/ a \\define('WP_SITEURL', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       # enable HTTPS in wp-config.php if ACM Public SSL Certificate parameter was not empty\n",
                             !If [ NoSslCertificate, !Join [ '', [ "       sed -i \"/$table_prefix = 'wp_';/ a \\# No ACM Public SSL Certificate \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] , !Join [ '', [ "       sed -i \"/$table_prefix = 'wp_';/ a \\$_SERVER['HTTPS'] = 'on';\" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] ],
                     "\n",
+                            !If [ EnableMultisite, !Join [ '' , [
+                              "       sed -i \"/$table_prefix = 'wp_';/ a \\",
+                              "define('WP_ALLOW_MULTISITE', true );\n",
+                              "define('MULTISITE', true);\n",
+                              "define('SUBDOMAIN_INSTALL', false );\n",
+                              "define('DOMAIN_CURRENT_SITE', '", !Ref WPDomainName,"');\n",
+                              "define('PATH_CURRENT_SITE', '/');\n",
+                              "define('SITE_ID_CURRENT_SITE', 1);\n",
+                              "define('BLOG_ID_CURRENT_SITE', 1);\n\" /var/www/wirdoress/", !Ref WPDirectory, "/wp-config.php\n"
+                            ]] ],
+                    "       sed -i s/wp_/", !Ref WPPrefix, "/g /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       # set permissions of wordpress site directories\n", 
                     "       chown -R apache:apache /var/www/wordpress/", !Ref WPDirectory, "\n",
                     "       chmod u+wrx /var/www/wordpress/", !Ref WPDirectory, "/wp-content/*\n",
@@ -821,14 +845,26 @@ Resources:
                     "   if ! $(wp core is-installed --allow-root); then\n",
                     "       wp core download --version='", !Ref WPVersion, "' --locale='", !Ref WPLocale, "' --allow-root\n",  
                     "       wp core config --dbname='", !Ref DatabaseName, "' --dbuser='", !Ref DatabaseMasterUsername, "' --dbpass='", !Ref DatabaseMasterPassword, "' --dbhost='", !Ref DatabaseClusterEndpointAddress, "' --dbprefix=wp_ --allow-root\n",
-                    "       wp core install --url=", !If [ NoWPDomainName, !Ref PublicAlbHostname, !Join [ "", [ "'http://www.", !Ref WPDomainName, "'" ] ] ], " --title='", !Ref WPTitle, "' --admin_user='", !Ref WPAdminUsername, "' --admin_password='", !Ref WPAdminPassword, "' --admin_email='", !Ref WPAdminEmail, "' --skip-email --allow-root\n",
+                    "       wp core install --url=", !If [ NoWPDomainName, !Ref PublicAlbHostname, !Join [ "", [ "'http://", !Ref WPDomainName, "'" ] ] ], " --title='", !Ref WPTitle, "' --admin_user='", !Ref WPAdminUsername, "' --admin_password='", !Ref WPAdminPassword, "' --admin_email='", !Ref WPAdminEmail, "' --skip-email --allow-root\n",
                     "       wp plugin install w3-total-cache\n",
                     "       sed -i \"/$table_prefix = 'wp_';/ a \\define('WP_HOME', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       sed -i \"/$table_prefix = 'wp_';/ a \\define('WP_SITEURL', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       # enable HTTPS in wp-config.php if ACM Public SSL Certificate parameter was not empty\n",
                             !If [ NoSslCertificate, !Join [ '', [ "       sed -i \"/$table_prefix = 'wp_';/ a \\# No ACM Public SSL Certificate \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] , !Join [ '', [ "       sed -i \"/$table_prefix = 'wp_';/ a \\$_SERVER['HTTPS'] = 'on';\" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] ],
                     "\n",
-                    "       # set permissions of wordpress site directories\n", 
+                            !If [ EnableMultisite, !Join [ '' , [
+                              "       sed -i \"/$table_prefix = 'wp_';/ a \\",
+                              "define('WP_ALLOW_MULTISITE', true );\n",
+                              "define('MULTISITE', true);\n",
+                              "define('SUBDOMAIN_INSTALL', false );\n",
+                              "define('DOMAIN_CURRENT_SITE', '", !Ref WPDomainName,"');\n",
+                              "define('PATH_CURRENT_SITE', '/');\n",
+                              "define('SITE_ID_CURRENT_SITE', 1);\n",
+                              "define('BLOG_ID_CURRENT_SITE', 1);\n\" /var/www/wirdoress/", !Ref WPDirectory, "/wp-config.php\n"
+                            ]] ],
+                    "       sed -i s/wp_/", !Ref WPPrefix, "/g /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
+                    "       sed -i s/wp_/", !Ref WPPrefix, "/g /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
+                    "       # set permissions of wordpress site directories\n",
                     "       chown -R apache:apache /var/www/wordpress/", !Ref WPDirectory, "\n",
                     "       chmod u+wrx /var/www/wordpress/", !Ref WPDirectory, "/wp-content/*\n",
                     "       if [ ! -f /var/www/wordpress/", !Ref WPDirectory, "/opcache-instanceid.php ]; then\n",
@@ -923,6 +959,7 @@ Resources:
             - install_aws_ini
             - install_cacheclient
             - install_wordpress
+            - run_multisite_dns
             - install_opcache
             - start_webserver
         install_webserver:
@@ -1026,13 +1063,24 @@ Resources:
                     "   if ! $(wp core is-installed --allow-root); then\n",
                     "       wp core download --version='", !Ref WPVersion, "' --locale='", !Ref WPLocale, "' --allow-root\n",  
                     "       wp core config --dbname='", !Ref DatabaseName, "' --dbuser='", !Ref DatabaseMasterUsername, "' --dbpass='", !Ref DatabaseMasterPassword, "' --dbhost='", !Ref DatabaseClusterEndpointAddress, "' --dbprefix=wp_ --allow-root\n",
-                    "       wp core install --url=", !If [ NoWPDomainName, !Ref PublicAlbHostname, !Join [ "", [ "'http://www.", !Ref WPDomainName, "'" ] ] ], " --title='", !Ref WPTitle, "' --admin_user='", !Ref WPAdminUsername, "' --admin_password='", !Ref WPAdminPassword, "' --admin_email='", !Ref WPAdminEmail, "' --skip-email --allow-root\n",
+                    "       wp core install --url=", !If [ NoWPDomainName, !Ref PublicAlbHostname, !Join [ "", [ "'http://", !Ref WPDomainName, "'" ] ] ], " --title='", !Ref WPTitle, "' --admin_user='", !Ref WPAdminUsername, "' --admin_password='", !Ref WPAdminPassword, "' --admin_email='", !Ref WPAdminEmail, "' --skip-email --allow-root\n",
                     "       wp plugin install w3-total-cache\n",
                     "       sed -i \"/$table_prefix = 'wp_';/ a \\define('WP_HOME', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       sed -i \"/$table_prefix = 'wp_';/ a \\define('WP_SITEURL', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       # enable HTTPS in wp-config.php if ACM Public SSL Certificate parameter was not empty\n",
                             !If [ NoSslCertificate, !Join [ '', [ "       sed -i \"/$table_prefix = 'wp_';/ a \\# No ACM Public SSL Certificate \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] , !Join [ '', [ "       sed -i \"/$table_prefix = 'wp_';/ a \\$_SERVER['HTTPS'] = 'on';\" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] ],
                     "\n",
+                            !If [ EnableMultisite, !Join [ '' , [
+                              "       sed -i \"/$table_prefix = 'wp_';/ a \\",
+                              "define('WP_ALLOW_MULTISITE', true );\n",
+                              "define('MULTISITE', true);\n",
+                              "define('SUBDOMAIN_INSTALL', false );\n",
+                              "define('DOMAIN_CURRENT_SITE', '", !Ref WPDomainName,"');\n",
+                              "define('PATH_CURRENT_SITE', '/');\n",
+                              "define('SITE_ID_CURRENT_SITE', 1);\n",
+                              "define('BLOG_ID_CURRENT_SITE', 1);\n\" /var/www/wirdoress/", !Ref WPDirectory, "/wp-config.php\n"
+                            ]], !Join [ '', [ "       sed -i \"/$table_prefix = 'wp_';/ a \\# Not Multisite \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] ],
+                    "       sed -i s/wp_/", !Ref WPPrefix, "/g /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       # set permissions of wordpress site directories\n", 
                     "       chown -R apache:apache /var/www/wordpress/", !Ref WPDirectory, "\n",
                     "       chmod u+wrx /var/www/wordpress/", !Ref WPDirectory, "/wp-content/*\n",
@@ -1066,6 +1114,35 @@ Resources:
               mode: 000500
               owner: root
               group: root
+        multisite_dns_sql:
+          files:
+            /tmp/set_dns.sql:
+              content:
+                !Join [
+                   "",[
+                      "SELECT @oldsite := `option_value` FROM ", !Ref WPPrefix, "options WHERE option_name = 'siteurl';\n"
+                      "SET @newsite='", !Ref WPDomainName,"';\n"
+                      "UPDATE ", !Ref WPPrefix, "options SET option_value = replace(option_value, @oldsite, @newsite) WHERE option_name = 'home' OR option_name = 'siteurl';\n"
+                      "UPDATE ", !Ref WPPrefix, "blogs SET domain = replace(domain, @oldsite, @newsite);\n"
+                      "UPDATE ", !Ref WPPrefix, "posts SET post_content = replace(post_content, @oldsite, @newsite);\n"
+                      "UPDATE ", !Ref WPPrefix, "links SET link_url = replace(link_url, @oldsite, @newsite);\n"
+                      "UPDATE ", !Ref WPPrefix, "postmeta SET meta_value = replace(meta_value, @oldsite, @newsite);\n"
+                    ]
+                  ]
+              mode: 0500
+              owner: root
+              group: root
+        run_multisite_dns:
+          command:
+            set_dns:
+              command:
+                !If [ EnableMultisite, !Join [
+                  "", [
+                    "/usr/bin/mysql -h ", !Ref DatabaseClusterEndpointAddress, " -u ", !Ref DatabaseMasterUsername, " -p", !Ref DatabaseMasterPassword, " ", !Ref DatabaseName, " < /tmp/set_dns.sql"
+                  ]
+                ], "/bin/echo 'Not multisite'"]
+                cwd: /tmp
+                ignoreErrors: truemultisite_dns_sql:
         install_aws_ini:
           commands:
             install_aws_ini:

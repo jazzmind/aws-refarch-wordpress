@@ -54,7 +54,7 @@ Resources:
     Properties:
       HostedZoneName: !Join ['', [!Ref WPDomainName, '.']]
       RecordSets:
-      - Name: !Join ['', ['www.', !Ref WPDomainName, '.']]
+      - Name: !Join ['', [!Ref WPDomainName, '.']]
         Type: A
         AliasTarget:
           DNSName: !Ref DnsEndpoint
