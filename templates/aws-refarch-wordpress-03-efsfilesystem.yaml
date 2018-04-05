@@ -480,6 +480,9 @@ Resources:
                     fi
                     sudo mkdir -p /$FILE_SYSTEM_ID/$WP_DIR
                     sudo rsync -r $COPY_SOURCE/* /$FILE_SYSTEM_ID/$WP_DIR/
+                    if [ -f /$FILE_SYSTEM_ID/$WP_DIR/wordpress.initialized]; then
+                      sudo rm -rf /$FILE_SYSTEM_ID/$WP_DIR/wordpress.initialized
+                    fi
                 fi
 
                 # set ASG to zero which terminates instance

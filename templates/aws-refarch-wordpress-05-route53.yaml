@@ -47,15 +47,16 @@ Parameters:
     Description: The main domain name of the WordPress site (e.g. example.com).
     Type: String
 
+
 Resources:
 
   RecordSet:
     Type: AWS::Route53::RecordSetGroup
     Properties:
-      HostedZoneName: !Join ['', [!Ref WPDomainName, '.']]
+      HostedZoneId: !Ref DnsHostId
       RecordSets:
       - Name: !Join ['', [!Ref WPDomainName, '.']]
-        Type: A
+        Type: CNAME
         AliasTarget:
           DNSName: !Ref DnsEndpoint
           EvaluateTargetHealth: True

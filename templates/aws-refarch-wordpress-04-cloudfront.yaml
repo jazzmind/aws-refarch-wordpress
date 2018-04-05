@@ -207,7 +207,7 @@ Resources:
         - DomainName: !Ref PublicAlbDnsName
           Id: elb
           CustomOriginConfig:
-            OriginProtocolPolicy: https-only
+            OriginProtocolPolicy: http-only
         PriceClass: PriceClass_100
         ViewerCertificate:
           AcmCertificateArn: !Ref CloudFrontAcmCertificate

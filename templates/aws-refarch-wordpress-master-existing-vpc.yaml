@@ -26,6 +26,7 @@ Metadata:
         - AdminEmail
         - WPDomainName
         - UseRoute53Boolean
+        - Route53Zone
         - UseCloudFrontBoolean
         - CloudFrontAcmCertificate
     - Label:
@@ -61,6 +62,7 @@ Metadata:
         - DatabaseMasterPassword
         - DatabaseRestoreSnapshot
         - DatabaseName
+        - WPPrefix
         - UseElastiCacheBoolean
         - ElastiCacheNodeType
     - Label:
@@ -85,7 +87,6 @@ Metadata:
         - WPAdminUsername
         - WPAdminPassword
         - WPDirectory
-        - WPPrefix
         - WPLocale
     ParameterLabels:
       AdminEmail:
@@ -325,9 +326,9 @@ Parameters:
   DatabaseMasterUsername:
     AllowedPattern: ^([a-zA-Z0-9]*)$
     Description: The Amazon RDS master username.
-    ConstraintDescription: Must contain only alphanumeric characters (minimum 8; maximum 16).
+    ConstraintDescription: Must contain only alphanumeric characters (minimum 4; maximum 16).
     MaxLength: 16
-    MinLength: 8
+    MinLength: 4
     Type: String
   DatabaseMasterPassword:
     AllowedPattern: ^([a-zA-Z0-9`~!#$%^&*()_+,\\-])*$
@@ -683,6 +684,9 @@ Parameters:
     Default: false
     Description: Specifies whether a record set should be created in Route 53 for your WordPress domain name. Requires custom domain name above.
     Type: String
+  Route53Zone:
+    Description: If using Route53, select Zone to create DNS entry
+    Type: String
   VpcId:
     Description: The VPC Id
     Type: AWS::EC2::VPC::Id
@@ -825,7 +829,7 @@ Parameters:
   WPLocale:
     Description: "The main language of the WordPress site, as per https://codex.WordPress.org/Installing_WordPress_in_Your_Language. The default is 'en_GB'."
     Type: String
-    Default: en_GB
+    Default: en_US
   WPTitle:
     Default: This is a new WordPress site on Amazon Web Services
     AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9 _-]*)([a-zA-Z0-9])$
@@ -1215,12 +1219,12 @@ Resources:
     Properties:
       Parameters:
         DnsEndpoint:
-          !If [ DeployCloudFront, !GetAtt [ cloudfront, Outputs.DnsEndpoint ], !GetAtt [ publicalb, Outputs.PublicAlbDnsName ] ]
+          !GetAtt [ publicalb, Outputs.PublicAlbDnsName ]
         DnsHostId:
-          !If [ DeployCloudFront, 'Z2FDTNDATAQYW2', !GetAtt [ publicalb, Outputs.PublicAlbCanonicalHostedZoneId ] ]
+          !Ref Route53Zone
         WPDomainName:
           !Ref WPDomainName
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-05-route53.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-05-route53.yaml
   securitygroups:
     Condition: AvailableAWSRegion
     Type: AWS::CloudFormation::Stack
@@ -1235,6 +1239,7 @@ Resources:
     Condition: AvailableAWSRegion
     DependsOn: [ efsfilesystem, publicalb, securitygroups ]
     Type: AWS::CloudFormation::Stack
+    Timeout: 15
     Properties:
       Parameters:
         DatabaseClusterEndpointAddress:
@@ -1269,6 +1274,8 @@ Resources:
           !Ref WebInstanceType
         WebSecurityGroup:
           !GetAtt [ securitygroups, Outputs.WebSecurityGroup ]
+        DatabaseRestoreSnapshot:
+          !Ref DatabaseRestoreSnapshot
         Subnet:
           !If
             [ NumberOfWebSubnets1,

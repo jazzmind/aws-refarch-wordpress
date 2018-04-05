@@ -178,16 +178,20 @@ Resources:
   PublicAlbTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckIntervalSeconds: 30
+      HealthCheckIntervalSeconds: 180
       HealthCheckPath: /wp-login.php
-      HealthCheckTimeoutSeconds: 5
+      HealthCheckTimeoutSeconds: 15
       Port: 80
       Protocol: HTTP
-      Matcher: !If [ EnableMultisite, '200,301', '200' ]
+      Matcher:
+        HttpCode: !If [ EnableMultisite, '200,302', '200' ]
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '2000'
       Tags:
       - Key: Name
         Value: !Join [ '', [ 'Public ALB / ', !Ref 'AWS::StackName' ] ]
-      UnhealthyThresholdCount: 5
+      UnhealthyThresholdCount: 10
       VpcId: !Ref Vpc
 
 Outputs:
