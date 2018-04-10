@@ -51,13 +51,11 @@ Parameters:
 Resources:
 
   RecordSet:
-    Type: AWS::Route53::RecordSetGroup
+    Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: !Ref DnsHostId
-      RecordSets:
-      - Name: !Join ['', [!Ref WPDomainName, '.']]
-        Type: CNAME
-        AliasTarget:
-          DNSName: !Ref DnsEndpoint
-          EvaluateTargetHealth: True
-          HostedZoneId: !Ref DnsHostId
+      Name: !Join ['', [!Ref WPDomainName, '.']]
+      Type: CNAME
+      TTL: '3200'
+      ResourceRecords:
+        - !Ref DnsEndpoint

@@ -184,7 +184,7 @@ Resources:
       Port: 80
       Protocol: HTTP
       Matcher:
-        HttpCode: !If [ EnableMultisite, '200,302', '200' ]
+        HttpCode: !If [ EnableMultisite, '200,301,302', '200' ]
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
           Value: '2000'

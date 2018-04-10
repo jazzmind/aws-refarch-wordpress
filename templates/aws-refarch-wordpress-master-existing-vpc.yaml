@@ -1239,7 +1239,6 @@ Resources:
     Condition: AvailableAWSRegion
     DependsOn: [ efsfilesystem, publicalb, securitygroups ]
     Type: AWS::CloudFormation::Stack
-    Timeout: 15
     Properties:
       Parameters:
         DatabaseClusterEndpointAddress:

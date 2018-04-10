@@ -515,7 +515,7 @@ Resources:
     CreationPolicy:
       ResourceSignal:
         Count: !Ref WebAsgMin
-        Timeout: PT5M
+        Timeout: PT30M
   WebLaunchConfiguration55:
     Condition: PHP55
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -1078,7 +1078,6 @@ Resources:
                     "       wp core download --version='", !Ref WPVersion, "' --locale='", !Ref WPLocale, "' --force --allow-root 2>&1\n",
                     "       wp config create --dbname='", !Ref DatabaseName, "' --dbuser='", !Ref DatabaseMasterUsername, "' --dbpass='", !Ref DatabaseMasterPassword, "' --dbhost='", !Ref DatabaseClusterEndpointAddress, "' --dbprefix='", !Ref WPPrefix,"' --force --allow-root\n",
                     "       wp core ", !If [ EnableMultisite, "multisite-install", "install" ], " --url=", !If [ NoWPDomainName, !Ref PublicAlbHostname, !Join [ "", [ "'http://", !Ref WPDomainName, "'" ] ] ], " --title='", !Ref WPTitle, "' --admin_user='", !Ref WPAdminUsername, "' --admin_password='", !Ref WPAdminPassword, "' --admin_email='", !Ref WPAdminEmail, "' --skip-email --allow-root\n",
-                    "       wp plugin install w3-total-cache --allow-root 2>&1\n",
                     "       sed -i \"/$table_prefix = '", !Ref WPPrefix,"';/ a \\define('WP_HOME', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       sed -i \"/$table_prefix = '", !Ref WPPrefix,"';/ a \\define('WP_SITEURL', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       # enable HTTPS in wp-config.php if ACM Public SSL Certificate parameter was not empty\n",
@@ -1088,12 +1087,12 @@ Resources:
                     "       if [ ! -f /var/www/wordpress/", !Ref WPDirectory, "/opcache-instanceid.php ]; then\n",
                     "         wget -P /var/www/wordpress/", !Ref WPDirectory, "/ https://s3.amazonaws.com/aws-refarch/wordpress/latest/bits/opcache-instanceid.php\n",
                     "       fi\n",
-                    "       chown -R apache:apache /var/www/wordpress/", !Ref WPDirectory, "\n",
                     "fi\n",
                     "wp core is-installed --allow-root\n",
                     "RESULT=$?\n",
                     "if [ $RESULT -eq 0 ]; then\n",
                     "   touch /var/www/wordpress/", !Ref WPDirectory, "/wordpress.initialized\n",
+                    "   chown -R apache:apache /var/www/wordpress/", !Ref WPDirectory, " || : \n",
                     "     else\n",
                     "   touch /var/www/wordpress/", !Ref WPDirectory, "/wordpress.failed\n",
                     "fi\n"
@@ -1124,7 +1123,7 @@ Resources:
                    "",[
                       "SELECT @oldsite := `option_value` FROM ", !Ref WPPrefix, "options WHERE option_name = 'siteurl';\n",
                       "SET @newsite='", !Ref WPDomainName,"';\n",
-                      "UPDATE ", !Ref WPPrefix, "optionss SET option_value = replace(option_value, @oldsite, @newsite) WHERE option_name = 'home' OR option_name = 'siteurl';\n",
+                      "UPDATE ", !Ref WPPrefix, "options SET option_value = replace(option_value, @oldsite, @newsite) WHERE option_name = 'home' OR option_name = 'siteurl';\n",
                       "UPDATE ", !Ref WPPrefix, "blogs SET domain = replace(domain, @oldsite, @newsite);\n",
                       "UPDATE ", !Ref WPPrefix, "posts SET post_content = replace(post_content, @oldsite, @newsite);\n",
                       "UPDATE ", !Ref WPPrefix, "links SET link_url = replace(link_url, @oldsite, @newsite);\n",
