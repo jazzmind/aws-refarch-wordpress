@@ -963,9 +963,9 @@ Resources:
             - download_aws_ini
             - install_aws_ini
             - install_cacheclient
-            - install_wordpress
             - multisite_dns_sql
             - run_multisite_dns
+            - install_wordpress
             - install_opcache
             - start_webserver
         install_webserver:
@@ -1049,6 +1049,75 @@ Resources:
               mode: 000500
               owner: root
               group: root
+        multisite_dns_sql:
+          files:
+            /tmp/set_dns.sql:
+              content:
+                !Join [
+                   "",[
+                      "SELECT @oldsite := `option_value` FROM ", !Ref WPPrefix, "options WHERE option_name = 'siteurl';\n",
+                      "SET @oldsite = REPLACE(@oldsite, 'https://', '');\n",
+                      "SET @oldsite = REPLACE(@oldsite, 'http://', '');\n",
+                      "SET @newsite='", !Ref WPDomainName,"';\n",
+                      "SET SQL_SAFE_UPDATES = 0;\n",
+
+                      "UPDATE ", !Ref WPPrefix, "blogs SET domain = @newsite;\n",
+                      "UPDATE ", !Ref WPPrefix, "site SET domain = @newsite;\n",
+                      "UPDATE ", !Ref WPPrefix, "posts SET post_content = replace(post_content, @oldsite, @newsite);\n",
+                      "UPDATE ", !Ref WPPrefix, "links SET link_url = replace(link_url, @oldsite, @newsite);\n",
+                      "UPDATE ", !Ref WPPrefix, "postmeta SET meta_value = replace(meta_value, @oldsite, @newsite);\n",
+                      "UPDATE ", !Ref WPPrefix, "sitemeta SET meta_value = replace(meta_value, @oldsite, @newsite) WHERE meta_key = 'siteurl';\n",
+                      "\n",
+                      "\n",
+                      "DELIMITER $$;\n",
+                      "DROP PROCEDURE IF EXISTS setoptions;\n",
+                      "\n",
+                      "CREATE PROCEDURE setoptions()\n",
+                      "\n",
+                      "BEGIN\n",
+                      "DECLARE done INT DEFAULT 0;\n",
+                      "DECLARE site VARCHAR(255) DEFAULT NULL;\n",
+
+                      "DECLARE cur CURSOR FOR SELECT table_name from INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE \"", !Ref WPPrefix, "%options\";\n",
+
+                      "DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;\n",
+                      "OPEN cur;\n",
+                      "read_loop: LOOP\n",
+                      "        FETCH NEXT FROM cur INTO site;\n",
+                      "\n",
+                      "        IF done THEN\n",
+                      "                LEAVE read_loop;\n",
+                      "        END IF;\n",
+                      "        SELECT site;\n",
+                      "        SET @sql := CONCAT('UPDATE ', site, ' SET option_value = replace(option_value, ?, ?) WHERE option_name = \"home\" OR option_name = \"siteurl\"');\n",
+                      "        PREPARE stmt FROM @sql;\n",
+                      "        EXECUTE stmt USING @oldsite, @newsite;\n",
+                      "        DEALLOCATE PREPARE stmt;\n",
+                      "END LOOP;\n",
+                      "CLOSE cur;\n",
+                      "END;\n",
+                      "\n",
+
+
+                      "CALL setoptions();\n",
+                      "SET SQL_SAFE_UPDATES = 1;\n"
+
+                    ]
+                  ]
+              mode: 0500
+              owner: root
+              group: root
+        run_multisite_dns:
+          commands:
+            set_dns:
+              command:
+                !If [ EnableMultisite, !Join [
+                  "", [
+                    "/usr/bin/mysql -h ", !Ref DatabaseClusterEndpointAddress, " -u ", !Ref DatabaseMasterUsername, " -p", !Ref DatabaseMasterPassword, " ", !Ref DatabaseName, " < /tmp/set_dns.sql 2>&1"
+                  ]
+                ], "/bin/echo 'Not worried about sql'" ]
+              cwd: /tmp
+              ignoreErrors: true
         build_wordpress:
           files:
             /tmp/install_wordpress.sh:
@@ -1078,8 +1147,8 @@ Resources:
                     "       wp core download --version='", !Ref WPVersion, "' --locale='", !Ref WPLocale, "' --force --allow-root 2>&1\n",
                     "       wp config create --dbname='", !Ref DatabaseName, "' --dbuser='", !Ref DatabaseMasterUsername, "' --dbpass='", !Ref DatabaseMasterPassword, "' --dbhost='", !Ref DatabaseClusterEndpointAddress, "' --dbprefix='", !Ref WPPrefix,"' --force --allow-root\n",
                     "       wp core ", !If [ EnableMultisite, "multisite-install", "install" ], " --url=", !If [ NoWPDomainName, !Ref PublicAlbHostname, !Join [ "", [ "'http://", !Ref WPDomainName, "'" ] ] ], " --title='", !Ref WPTitle, "' --admin_user='", !Ref WPAdminUsername, "' --admin_password='", !Ref WPAdminPassword, "' --admin_email='", !Ref WPAdminEmail, "' --skip-email --allow-root\n",
-                    "       sed -i \"/$table_prefix = '", !Ref WPPrefix,"';/ a \\define('WP_HOME', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
-                    "       sed -i \"/$table_prefix = '", !Ref WPPrefix,"';/ a \\define('WP_SITEURL', 'http://' . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
+                    "       sed -i \"/$table_prefix = '", !Ref WPPrefix,"';/ a \\define('WP_HOME', ", !If [ NoSslCertificate, "'http://'", "'https://'"], " . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
+                    "       sed -i \"/$table_prefix = '", !Ref WPPrefix,"';/ a \\define('WP_SITEURL', ", !If [ NoSslCertificate, "'http://'", "'https://'"], " . \\$_SERVER['HTTP_HOST']); \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       # enable HTTPS in wp-config.php if ACM Public SSL Certificate parameter was not empty\n",
                             !If [ NoSslCertificate, !Join [ '', [ "       sed -i \"/$table_prefix = '", !Ref WPPrefix,"';/ a \\# No ACM Public SSL Certificate \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] , !Join [ '', [ "       sed -i \"/$table_prefix = '", !Ref WPPrefix,"';/ a \\$_SERVER['HTTPS'] = 'on';\" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] ], "\n",
                     "       echo 'set permissions of wordpress site directories'\n",
@@ -1092,8 +1161,34 @@ Resources:
                     "RESULT=$?\n",
                     "if [ $RESULT -eq 0 ]; then\n",
                     "   touch /var/www/wordpress/", !Ref WPDirectory, "/wordpress.initialized\n",
+                    "   cat > /var/www/wordpress/", !Ref WPDirectory, "/.htaccess << EOL \n",
+                    !If [ EnableMultisite, !Join [ '', [
+                                                         "RewriteEngine On\n",
+                                                         "RewriteBase /\n",
+                                                         "RewriteRule ^index\\.php$ - [L]\n",
+
+                                                         "# add a trailing slash to /wp-admin\n",
+                                                         "RewriteRule ^([_0-9a-zA-Z-]+/)?wp-admin$ $1wp-admin/ [R=301,L]\n",
+
+                                                         "RewriteCond %{REQUEST_FILENAME} -f [OR]\n",
+                                                         "RewriteCond %{REQUEST_FILENAME} -d\n",
+                                                         "RewriteRule ^ - [L]\n",
+                                                         "RewriteRule ^([_0-9a-zA-Z-]+/)?(wp-(content|admin|includes).*) $2 [L]\n",
+                                                         "RewriteRule ^([_0-9a-zA-Z-]+/)?(.*\\.php)$ $2 [L]\n",
+                                                         "RewriteRule . index.php [L]\n" ] ],
+                                                    !Join [ '', [
+                                                         "# BEGIN WordPress\n",
+                                                         "<IfModule mod_rewrite.c>\n",
+                                                         "RewriteEngine On\n",
+                                                         "RewriteBase /\n",
+                                                         "RewriteRule ^index\\.php$ - [L]\n",
+                                                         "RewriteCond %{REQUEST_FILENAME} !-f\n",
+                                                         "RewriteCond %{REQUEST_FILENAME} !-d\n",
+                                                         "RewriteRule . /index.php [L]\n",
+                                                         "</IfModule>\n",
+                                                         "# END WordPress\n" ] ] ], "EOL\n",
                     "   chown -R apache:apache /var/www/wordpress/", !Ref WPDirectory, " || : \n",
-                    "     else\n",
+                    "else\n",
                     "   touch /var/www/wordpress/", !Ref WPDirectory, "/wordpress.failed\n",
                     "fi\n"
                   ]
@@ -1115,35 +1210,6 @@ Resources:
               mode: 000500
               owner: root
               group: root
-        multisite_dns_sql:
-          files:
-            /tmp/set_dns.sql:
-              content:
-                !Join [
-                   "",[
-                      "SELECT @oldsite := `option_value` FROM ", !Ref WPPrefix, "options WHERE option_name = 'siteurl';\n",
-                      "SET @newsite='", !Ref WPDomainName,"';\n",
-                      "UPDATE ", !Ref WPPrefix, "options SET option_value = replace(option_value, @oldsite, @newsite) WHERE option_name = 'home' OR option_name = 'siteurl';\n",
-                      "UPDATE ", !Ref WPPrefix, "blogs SET domain = replace(domain, @oldsite, @newsite);\n",
-                      "UPDATE ", !Ref WPPrefix, "posts SET post_content = replace(post_content, @oldsite, @newsite);\n",
-                      "UPDATE ", !Ref WPPrefix, "links SET link_url = replace(link_url, @oldsite, @newsite);\n",
-                      "UPDATE ", !Ref WPPrefix, "postmeta SET meta_value = replace(meta_value, @oldsite, @newsite);\n"
-                    ]
-                  ]
-              mode: 0500
-              owner: root
-              group: root
-        run_multisite_dns:
-          commands:
-            set_dns:
-              command:
-                !If [ EnableMultisite, !Join [
-                  "", [
-                    "/usr/bin/mysql -h ", !Ref DatabaseClusterEndpointAddress, " -u ", !Ref DatabaseMasterUsername, " -p", !Ref DatabaseMasterPassword, " ", !Ref DatabaseName, " < /tmp/set_dns.sql 2>&1"
-                  ]
-                ], "/bin/echo 'Not worried about sql'" ]
-              cwd: /tmp
-              ignoreErrors: true
         install_aws_ini:
           commands:
             install_aws_ini:
