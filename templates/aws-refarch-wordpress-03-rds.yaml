@@ -86,9 +86,9 @@ Parameters:
   DatabaseMasterUsername:
     AllowedPattern: ^([a-zA-Z0-9]*)$
     Description: The Amazon RDS master username.
-    ConstraintDescription: Must contain only alphanumeric characters (minimum 8; maximum 16).
+    ConstraintDescription: Must contain only alphanumeric characters (minimum 4; maximum 16).
     MaxLength: 16
-    MinLength: 8
+    MinLength: 4
     Type: String
   DatabaseMasterPassword:
     AllowedPattern: ^([a-z0-9A-Z`~!#$%^&*()_+,\\-])*$

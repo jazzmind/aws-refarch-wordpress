@@ -26,6 +26,7 @@ Metadata:
         - AdminEmail
         - WPDomainName
         - UseRoute53Boolean
+        - Route53Zone
         - UseCloudFrontBoolean
         - CloudFrontAcmCertificate
     - Label:
@@ -61,6 +62,7 @@ Metadata:
         - DatabaseMasterPassword
         - DatabaseRestoreSnapshot
         - DatabaseName
+        - WPPrefix
         - UseElastiCacheBoolean
         - ElastiCacheNodeType
     - Label:
@@ -81,6 +83,7 @@ Metadata:
       Parameters:
         - WPVersion
         - WPTitle
+        - WPMultisiteBoolean
         - WPAdminUsername
         - WPAdminPassword
         - WPDirectory
@@ -107,8 +110,7 @@ Metadata:
       DatabaseName:
         default: DB Name
       DatabaseRestoreSnapshot:
-        Description: The snapshot name to restore from.
-        Type: String
+        default: Database Snapshot
       EfsAlarmsInstanceType:
         default: Instance Type
       EfsCmk:
@@ -120,8 +122,7 @@ Metadata:
       EfsGrowth:
         default: Add dummy data (GiB)
       EfsCopyDataFrom:
-        Description: Clone EFS files from existing EFS (Enter existing EFS file system ID)
-        Type: String
+        default: Clone EFS
       EfsGrowthInstanceType:
         default: Instance Type
       EfsCriticalThreshold:
@@ -172,10 +173,14 @@ Metadata:
         default: Admin Username
       WPAdminPassword:
         default: Admin Password
+      WPPrefix:
+        default: Wordpress Prefix
       WPDirectory:
         default: Site Directory
       WPDomainName:
         default: Site Domain
+      WPMultisiteBoolean:
+        default: Multisite
       WPLocale:
         default: Language Code
       WPVersion:
@@ -321,9 +326,9 @@ Parameters:
   DatabaseMasterUsername:
     AllowedPattern: ^([a-zA-Z0-9]*)$
     Description: The Amazon RDS master username.
-    ConstraintDescription: Must contain only alphanumeric characters (minimum 8; maximum 16).
+    ConstraintDescription: Must contain only alphanumeric characters (minimum 4; maximum 16).
     MaxLength: 16
-    MinLength: 8
+    MinLength: 4
     Type: String
   DatabaseMasterPassword:
     AllowedPattern: ^([a-zA-Z0-9`~!#$%^&*()_+,\\-])*$
@@ -333,6 +338,9 @@ Parameters:
     MinLength: 8
     NoEcho: true
     Type: String
+  DatabaseRestoreSnapshot:
+      Description: The cluster snapshot name to restore from.
+      Type: String
   DatabaseName:
     AllowedPattern: ^([a-zA-Z0-9]*)$
     Description: The Amazon RDS master database name.
@@ -572,6 +580,9 @@ Parameters:
     Default: 180
     Description: Send warning alarm approx. this many minutes before Amazon EFS burst credit balance is zero.
     Type: String
+  EfsCopyDataFrom:
+    Description: Clone EFS files from existing EFS (Enter existing EFS file system ID)
+    Type: String
   ElastiCacheNodeType:
     AllowedValues:
       - cache.t2.micro
@@ -672,6 +683,9 @@ Parameters:
       - false
     Default: false
     Description: Specifies whether a record set should be created in Route 53 for your WordPress domain name. Requires custom domain name above.
+    Type: String
+  Route53Zone:
+    Description: If using Route53, select Zone to create DNS entry
     Type: String
   VpcId:
     Description: The VPC Id
@@ -797,14 +811,25 @@ Parameters:
     AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9_-])*([a-zA-Z0-9])$
     Description: The WordPress site directory.
     Type: String
+  WPPrefix:
+    Default: wp_
+    Description: The WordPress database table prefix.
+    Type: String
   WPDomainName:
     AllowedPattern: ^$|(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
     Description: '[ Optional ] The main domain name of the WordPress site (e.g. example.com).'
     Type: String
+  WPMultisiteBoolean:
+    AllowedValues:
+      - true
+      - false
+    Default: false
+    Description: Enable Multisite, this will modify SQL to set domain and add multisite settings in wp-config.
+    Type: String
   WPLocale:
     Description: "The main language of the WordPress site, as per https://codex.WordPress.org/Installing_WordPress_in_Your_Language. The default is 'en_GB'."
     Type: String
-    Default: en_GB
+    Default: en_US
   WPTitle:
     Default: This is a new WordPress site on Amazon Web Services
     AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9 _-]*)([a-zA-Z0-9])$
@@ -850,6 +875,8 @@ Conditions:
   DeployElastiCache: !And
     - !Equals [ true, !Ref UseElastiCacheBoolean ]
     - !Condition AvailableAWSRegion
+  EnableMultisite:
+      !Equals [ true, !Ref WPMultisiteBoolean ]
   NumberOfPublicSubnets1:
       !Equals [ 1, !Ref NumberOfPublicSubnets ]
   NumberOfPublicSubnets2:
@@ -932,7 +959,7 @@ Resources:
           !GetAtt [ publicalb, Outputs.PublicAlbDnsName ]
         WPDomainName:
           !Ref WPDomainName
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-04-cloudfront.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-04-cloudfront.yaml
   dashboardwithalarms:
     Condition: EfsCreateAlarms
     DependsOn: [ securitygroups, publicalb, efsfilesystem, rds, efsalarms ]
@@ -955,7 +982,7 @@ Resources:
           !GetAtt [ publicalb, Outputs.PublicAlbFullName ]
         EfsCreateAlarms:
           !Ref EfsCreateAlarms         
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-06-dashboard.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-06-dashboard.yaml
   dashboardwithnoalarms:
     Condition: EfsCreateNoAlarms
     DependsOn: [ securitygroups, publicalb, efsfilesystem, rds ]
@@ -970,7 +997,7 @@ Resources:
           !GetAtt [ publicalb, Outputs.PublicAlbFullName ]
         EfsCreateAlarms:
           !Ref EfsCreateAlarms         
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-06-dashboard.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-06-dashboard.yaml
   efsfilesystem:
     DependsOn: [ securitygroups ]
     Type: AWS::CloudFormation::Stack
@@ -986,6 +1013,8 @@ Resources:
           !GetAtt [ securitygroups, Outputs.EfsSecurityGroup ]
         Growth:
           !Ref EfsGrowth
+        WPDirectory:
+          !Ref WPDirectory
         EfsCopyDataFrom:
           !Ref EfsCopyDataFrom
         InstanceType:
@@ -1016,7 +1045,7 @@ Resources:
                 ]
               ]
             ]
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-03-efsfilesystem.yaml
+      TemplateURL: hhttps://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-03-efsfilesystem.yaml
   efsalarms:
     Condition: EfsCreateAlarms
     DependsOn: [ efsfilesystem ]
@@ -1061,7 +1090,7 @@ Resources:
             ]
         WarningThreshold:
           !Ref EfsWarningThreshold
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-03-efsalarms.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-03-efsalarms.yaml
   elasticache:
     Condition: DeployElastiCache
     DependsOn: [ securitygroups ]
@@ -1096,7 +1125,7 @@ Resources:
           !GetAtt [ securitygroups, Outputs.ElastiCacheSecurityGroup ]
         NumberOfSubnets:
           !Ref NumberOfDataSubnets
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-03-elasticache.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-03-elasticache.yaml
   publicalb:
     Condition: AvailableAWSRegion
     DependsOn: [ securitygroups ]
@@ -1131,9 +1160,11 @@ Resources:
           !Ref PublicAlbAcmCertificate
         PublicAlbSecurityGroup:
           !GetAtt [ securitygroups, Outputs.PublicAlbSecurityGroup ]
+        WPMultisiteBoolean:
+          !Ref WPMultisiteBoolean
         Vpc:
           !Ref VpcId
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-03-publicalb.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-03-publicalb.yaml
   rds:
     Condition: AvailableAWSRegion
     DependsOn: [ securitygroups ]
@@ -1180,7 +1211,7 @@ Resources:
             ]
         NumberOfSubnets:
           !Ref NumberOfDataSubnets
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-03-rds.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-03-rds.yaml
   route53:
     Condition: CreateRecordSet
     DependsOn: [ publicalb, web ]
@@ -1188,12 +1219,12 @@ Resources:
     Properties:
       Parameters:
         DnsEndpoint:
-          !If [ DeployCloudFront, !GetAtt [ cloudfront, Outputs.DnsEndpoint ], !GetAtt [ publicalb, Outputs.PublicAlbDnsName ] ]
+          !GetAtt [ publicalb, Outputs.PublicAlbDnsName ]
         DnsHostId:
-          !If [ DeployCloudFront, 'Z2FDTNDATAQYW2', !GetAtt [ publicalb, Outputs.PublicAlbCanonicalHostedZoneId ] ]
+          !Ref Route53Zone
         WPDomainName:
           !Ref WPDomainName
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-05-route53.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-05-route53.yaml
   securitygroups:
     Condition: AvailableAWSRegion
     Type: AWS::CloudFormation::Stack
@@ -1242,6 +1273,8 @@ Resources:
           !Ref WebInstanceType
         WebSecurityGroup:
           !GetAtt [ securitygroups, Outputs.WebSecurityGroup ]
+        DatabaseRestoreSnapshot:
+          !Ref DatabaseRestoreSnapshot
         Subnet:
           !If
             [ NumberOfWebSubnets1,
@@ -1274,13 +1307,18 @@ Resources:
           !Ref WPDirectory
         WPDomainName:
           !Ref WPDomainName
+        WPMultisiteBoolean:
+          !Ref WPMultisiteBoolean
+        WPPrefix:
+          !Ref WPPrefix
         WPLocale:
           !Ref WPLocale
         WPTitle:
           !Ref WPTitle
         WPVersion:
           !Ref WPVersion
-      TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-04-web.yaml
+      #TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-04-web.yaml
+      TemplateURL: https://s3.amazonaws.com/cf-templates-1cjhdz69pbphb-us-east-1/aws-refarch-wordpress/templates/aws-refarch-wordpress-04-web.yaml
 
 Outputs:
 
