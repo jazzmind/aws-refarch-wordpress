@@ -26,6 +26,7 @@ Metadata:
         - AdminEmail
         - WPDomainName
         - UseRoute53Boolean
+        - Route53Zone
         - UseCloudFrontBoolean
         - CloudFrontAcmCertificate
     - Label:
@@ -39,26 +40,21 @@ Metadata:
         - PublicSubnet1Cidr
         - PublicSubnet2Cidr
         - PublicSubnet3Cidr
-        - PublicSubnet4Cidr
-        - PublicSubnet5Cidr
         - WebSubnet0Cidr
         - WebSubnet1Cidr
         - WebSubnet2Cidr
         - WebSubnet3Cidr
-        - WebSubnet4Cidr
-        - WebSubnet5Cidr
         - DataSubnet0Cidr
         - DataSubnet1Cidr
         - DataSubnet2Cidr
         - DataSubnet3Cidr
-        - DataSubnet4Cidr
-        - DataSubnet5Cidr
     - Label:
         default: File System Tier
       Parameters:
         - EfsPerformanceMode
         - EfsEncrpytedBoolean
         - EfsCmk
+        - EfsCopyDataFrom
         - EfsGrowth
         - EfsGrowthInstanceType
         - EfsCreateAlarms
@@ -73,7 +69,9 @@ Metadata:
         - DatabaseCmk
         - DatabaseMasterUsername
         - DatabaseMasterPassword
+        - DatabaseRestoreSnapshot
         - DatabaseName
+        - WPPrefix
         - UseElastiCacheBoolean
         - ElastiCacheNodeType
     - Label:
@@ -94,11 +92,14 @@ Metadata:
       Parameters:
         - WPVersion
         - WPTitle
+        - WPMultisiteBoolean
         - WPAdminUsername
         - WPAdminPassword
         - WPDirectory
         - WPLocale
     ParameterLabels:
+      AdminEmail:
+        default: Email Address
       BastionInstanceType:
         default: Bastion Instance Type
       CloudFrontAcmCertificate:
@@ -115,6 +116,8 @@ Metadata:
         default: DB Master Password
       DatabaseName:
         default: DB Name
+      DatabaseRestoreSnapshot:
+        default: Database Snapshot        
       EfsAlarmsInstanceType:
         default: Instance Type
       EfsCmk:
@@ -125,6 +128,8 @@ Metadata:
         default: Encrpyted EFS?
       EfsGrowth:
         default: Add dummy data (GiB)
+      EfsCopyDataFrom:
+        default: Clone EFS
       EfsGrowthInstanceType:
         default: Instance Type
       EfsCriticalThreshold:
@@ -139,6 +144,8 @@ Metadata:
         default: EC2 Key Pair
       PHPIniOverride:
         default: AWS php.ini Overrides
+      PHPVersion:
+        default: PHP Version
       PublicAlbAcmCertificate:
         default: ALB Certificate ARN
       SshAccessCidr:
@@ -161,12 +168,14 @@ Metadata:
         default: Admin Username
       WPAdminPassword:
         default: Admin Password
-      AdminEmail:
-        default: Email Address
+      WPPrefix:
+        default: Wordpress Prefix
       WPDirectory:
         default: Site Directory
       WPDomainName:
         default: Site Domain
+      WPMultisiteBoolean:
+        default: Multisite
       WPLocale:
         default: Language Code
       WPVersion:
@@ -219,7 +228,10 @@ Metadata:
         default: Data Subnet 5
 
 Parameters:
-
+  AdminEmail:
+    AllowedPattern: ^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$
+    Description: The admin email address for WordPress and AWS notifications.
+    Type: String
   BastionInstanceType:
     AllowedValues:
     - t2.nano 
@@ -351,9 +363,9 @@ Parameters:
   DatabaseMasterUsername:
     AllowedPattern: ^([a-zA-Z0-9]*)$
     Description: The Amazon RDS master username.
-    ConstraintDescription: Must contain only alphanumeric characters (minimum 8; maximum 16).
+    ConstraintDescription: Must contain only alphanumeric characters (minimum 4; maximum 16).
     MaxLength: 16
-    MinLength: 8
+    MinLength: 4
     Type: String
   DatabaseMasterPassword:
     AllowedPattern: ^([a-zA-Z0-9`~!#$%^&*()_+,\\-])*$
@@ -363,6 +375,9 @@ Parameters:
     MinLength: 8
     NoEcho: true
     Type: String
+  DatabaseRestoreSnapshot:
+      Description: The cluster snapshot name to restore from.
+      Type: String
   DatabaseName:
     AllowedPattern: ^([a-zA-Z0-9]*)$
     Description: The Amazon RDS master database name.
@@ -602,6 +617,9 @@ Parameters:
     Default: 180
     Description: Send warning alarm approx. this many minutes before Amazon EFS burst credit balance is zero.
     Type: String
+  EfsCopyDataFrom:
+    Description: Clone EFS files from existing EFS (Enter existing EFS file system ID)
+    Type: String
   ElastiCacheNodeType:
     AllowedValues:
       - cache.t2.micro
@@ -667,8 +685,11 @@ Parameters:
     AllowedValues:
       - true
       - false
-    Default: true
-    Description: Specifies whether a record set should be created in Route 53 for your WordPress domain name.
+    Default: false
+    Description: Specifies whether a record set should be created in Route 53 for your WordPress domain name.  Requires custom domain name above.
+    Type: String
+  Route53Zone:
+    Description: If using Route53, select Zone to create DNS entry
     Type: String
   WebAsgMax:
     AllowedPattern: ^((?!0$)[1-2]?[0-9]|30)$
@@ -777,10 +798,6 @@ Parameters:
     Default: t2.large
     Description: The Amazon EC2 instance type for your web instances.
     Type: String
-  AdminEmail:
-    AllowedPattern: ^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$
-    Description: The admin email address for WordPress and AWS notifications.
-    Type: String
   WPAdminPassword:
     AllowedPattern: ^([a-zA-Z0-9`~!#$%^&*()_+,\\-])*$
     ConstraintDescription: Must be letters (upper or lower), numbers, spaces, and these special characters `~!#$%^&*()_+,-    
@@ -795,14 +812,25 @@ Parameters:
     AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9_-])*([a-zA-Z0-9])$
     Description: The WordPress site directory.
     Type: String
+  WPPrefix:
+    Default: wp_
+    Description: The WordPress database table prefix.
+    Type: String
   WPDomainName:
     AllowedPattern: ^$|(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
     Description: '[ Optional ] The main domain name of the WordPress site (e.g. example.com).'
     Type: String
+  WPMultisiteBoolean:
+    AllowedValues:
+      - true
+      - false
+    Default: false
+    Description: Enable Multisite, this will modify SQL to set domain and add multisite settings in wp-config.
+    Type: String
   WPLocale:
     Description: "The main language of the WordPress site, as per https://codex.WordPress.org/Installing_WordPress_in_Your_Language. The default is 'en_GB'."
     Type: String
-    Default: en_GB
+    Default: en_AU
   WPTitle:
     Default: This is a new WordPress site on Amazon Web Services
     AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9 _-]*)([a-zA-Z0-9])$
@@ -981,6 +1009,9 @@ Conditions:
   DeployElastiCache: !And
     - !Equals [ true, !Ref UseElastiCacheBoolean ]
     - !Condition AvailableAWSRegion
+  EnableMultisite:
+      !Equals [ true, !Ref WPMultisiteBoolean ]
+
 
 Resources:
 
@@ -1067,6 +1098,10 @@ Resources:
           !GetAtt [ securitygroups, Outputs.EfsSecurityGroup ]
         Growth:
           !Ref EfsGrowth
+        WPDirectory:
+          !Ref WPDirectory
+        EfsCopyDataFrom:
+          !Ref EfsCopyDataFrom
         InstanceType:
           !Ref EfsGrowthInstanceType
         NumberOfSubnets:
@@ -1181,6 +1216,8 @@ Resources:
           !Ref PublicAlbAcmCertificate
         PublicAlbSecurityGroup:
           !GetAtt [ securitygroups, Outputs.PublicAlbSecurityGroup ]
+        WPMultisiteBoolean:
+          !Ref WPMultisiteBoolean
         Vpc:
           !GetAtt [ newvpc, Outputs.Vpc ]
       TemplateURL: https://s3.amazonaws.com/aws-refarch/wordpress/latest/templates/aws-refarch-wordpress-03-publicalb.yaml
@@ -1196,6 +1233,8 @@ Resources:
           !Ref DatabaseMasterUsername
         DatabaseMasterPassword:
           !Ref DatabaseMasterPassword
+        DatabaseRestoreSnapshot:
+          !Ref DatabaseRestoreSnapshot
         DatabaseName:
           !Ref DatabaseName
         DatabaseEncrpytedBoolean:
@@ -1271,6 +1310,8 @@ Resources:
           !Ref WebInstanceType
         WebSecurityGroup:
           !GetAtt [ securitygroups, Outputs.WebSecurityGroup ]
+        DatabaseRestoreSnapshot:
+          !Ref DatabaseRestoreSnapshot
         Subnet:
           !GetAtt [ newvpc, Outputs.WebSubnet ]
         WPAdminEmail:
@@ -1283,6 +1324,10 @@ Resources:
           !Ref WPDirectory
         WPDomainName:
           !Ref WPDomainName
+        WPMultisiteBoolean:
+          !Ref WPMultisiteBoolean
+        WPPrefix:
+          !Ref WPPrefix
         WPLocale:
           !Ref WPLocale
         WPTitle:
