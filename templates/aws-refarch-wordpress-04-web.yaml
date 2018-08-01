@@ -652,7 +652,7 @@ Resources:
                               "       define('DOMAIN_CURRENT_SITE', '", !Ref WPDomainName,"');\n",
                               "       define('PATH_CURRENT_SITE', '/');\n",
                               "       define('SITE_ID_CURRENT_SITE', 1);\n",
-                              "       define('BLOG_ID_CURRENT_SITE', 1);\n\" /var/www/wirdoress/", !Ref WPDirectory, "/wp-config.php\n"
+                              "       define('BLOG_ID_CURRENT_SITE', 1);\n\" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n"
                             ]], !Join [ '', [ "       sed -i \"/$table_prefix = 'wp_';/ a \\# Not Multisite \" /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n" ] ] ],
                     "       sed -i s/wp_/", !Ref WPPrefix, "/g /var/www/wordpress/", !Ref WPDirectory, "/wp-config.php\n",
                     "       # set permissions of wordpress site directories\n", 
