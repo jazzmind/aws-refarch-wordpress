@@ -1,15 +1,8 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
-Description: Example CloudFormation template for running an ECS cluster on EC2 Spot Instances.
+Description: CloudFormation template for running an ECS cluster on EC2 Spot Instances.
   Includes EC2 Spot Instance termination notice handler script.
 Mappings:
-  CidrMappings:
-    public-subnet-1:
-      CIDR: 10.0.1.0/24
-    public-subnet-2:
-      CIDR: 10.0.2.0/24
-    vpc:
-      CIDR: 10.0.0.0/16
   ecsOptimizedAmi:
     ap-northeast-1:
       AMI: ami-a99d8ad5
@@ -70,148 +63,30 @@ Outputs:
       Ref: spotFleet
 Parameters:
   ecsClusterTargetCapacity:
-    Default: 2
+    Default: 1
     Description: Number of EC2 Spot instances to initially launch in the ECS cluster
     Type: Number
   instanceType:
     AllowedValues:
     - t2.small
-    - c3.large
-    - c4.large
-    - m3.large
-    - m4.large
-    - r3.large
-    - r4.large
-    Default: c4.large
+    Default: t2.small
     Description: EC2 instance type to use for ECS cluster
     Type: String
   keyName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the EC2 instances
     Type: AWS::EC2::KeyPair::KeyName
-  sourceCidr:
-    Default: 0.0.0.0/0
-    Description: Optional - CIDR/IP range for instance ssh access - defaults to 0.0.0.0/0
-    Type: String
+  logRetentionInDays:
+    Default: 7
+    Description: retention time in days for log within cloudwatch log group
+    Type: Number
 Resources:
-  attachGateway:
-    DependsOn:
-    - vpc
-    - internetGateway
-    Properties:
-      InternetGatewayId:
-        Ref: internetGateway
-      VpcId:
-        Ref: vpc
-    Type: AWS::EC2::VPCGatewayAttachment
   cloudWatchLogsGroup:
     Properties:
-      RetentionInDays: 7
+      RetentionInDays:
+        Ref: logRetentionInDays
     Type: AWS::Logs::LogGroup
   ecsCluster:
     Type: AWS::ECS::Cluster
-  internetGateway:
-    DependsOn:
-    - vpc
-    Type: AWS::EC2::InternetGateway
-  publicRoute:
-    DependsOn:
-    - publicRouteTable
-    - internetGateway
-    - attachGateway
-    Properties:
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId:
-        Ref: internetGateway
-      RouteTableId:
-        Ref: publicRouteTable
-    Type: AWS::EC2::Route
-  publicRouteTable:
-    DependsOn:
-    - vpc
-    - attachGateway
-    Properties:
-      Tags:
-      - Key: Name
-        Value: Public Route Table
-      VpcId:
-        Ref: vpc
-    Type: AWS::EC2::RouteTable
-  publicSubnet1:
-    DependsOn: attachGateway
-    Properties:
-      AvailabilityZone:
-        Fn::Select:
-        - 0
-        - Fn::GetAZs:
-            Ref: AWS::Region
-      CidrBlock:
-        Fn::FindInMap:
-        - CidrMappings
-        - public-subnet-1
-        - CIDR
-      MapPublicIpOnLaunch: true
-      Tags:
-      - Key: Name
-        Value: Public Subnet 1
-      VpcId:
-        Ref: vpc
-    Type: AWS::EC2::Subnet
-  publicSubnet1RouteTableAssociation:
-    DependsOn:
-    - publicRouteTable
-    - publicSubnet1
-    - attachGateway
-    Properties:
-      RouteTableId:
-        Ref: publicRouteTable
-      SubnetId:
-        Ref: publicSubnet1
-    Type: AWS::EC2::SubnetRouteTableAssociation
-  publicSubnet2:
-    DependsOn: attachGateway
-    Properties:
-      AvailabilityZone:
-        Fn::Select:
-        - 1
-        - Fn::GetAZs:
-            Ref: AWS::Region
-      CidrBlock:
-        Fn::FindInMap:
-        - CidrMappings
-        - public-subnet-2
-        - CIDR
-      MapPublicIpOnLaunch: true
-      Tags:
-      - Key: Name
-        Value: Public Subnet 2
-      VpcId:
-        Ref: vpc
-    Type: AWS::EC2::Subnet
-  publicSubnet2RouteTableAssociation:
-    DependsOn:
-    - publicRouteTable
-    - publicSubnet2
-    - attachGateway
-    Properties:
-      RouteTableId:
-        Ref: publicRouteTable
-      SubnetId:
-        Ref: publicSubnet2
-    Type: AWS::EC2::SubnetRouteTableAssociation
-  securityGroup:
-    DependsOn:
-    - vpc
-    Properties:
-      GroupDescription: Spot fleet instance Security Group
-      SecurityGroupIngress:
-      - CidrIp:
-          Ref: sourceCidr
-        FromPort: 22
-        IpProtocol: tcp
-        ToPort: 22
-      VpcId:
-        Ref: vpc
-    Type: AWS::EC2::SecurityGroup
   snsTopic:
     Type: AWS::SNS::Topic
   spotFleet:
@@ -219,7 +94,6 @@ Resources:
     - spotFleetRole
     - spotFleetInstanceProfile
     - ecsCluster
-    - securityGroup
     Properties:
       SpotFleetRequestConfigData:
         AllocationStrategy: diversified
@@ -245,13 +119,8 @@ Resources:
           Monitoring:
             Enabled: true
           SecurityGroups:
-          - GroupId:
-              Ref: securityGroup
-          SubnetId:
-            Fn::Join:
-            - ','
-            - - Ref: publicSubnet1
-              - Ref: publicSubnet2
+          - GroupId: sg-0647f97e
+          SubnetId: 'subnet-e968ceb1,subnet-afdafbe6'
           UserData:
             Fn::Base64:
               Fn::Sub: '#!/bin/bash -xe
@@ -271,14 +140,11 @@ Resources:
                 echo ECS_CLUSTER=${ecsCluster} >> /etc/ecs/ecs.config
 
 
-
                 cat <<EOF > /tmp/awslogs.conf
 
                 [general]
 
                 state_file = /var/awslogs/state/agent-state
-
-
 
                 [/var/log/dmesg]
 
@@ -289,8 +155,6 @@ Resources:
                 log_stream_name = %ECS_CLUSTER/%CONTAINER_INSTANCE/var/log/dmesg
 
                 initial_position = start_of_file
-
-
 
                 [/var/log/messages]
 
@@ -304,8 +168,6 @@ Resources:
 
                 initial_position = start_of_file
 
-
-
                 [/var/log/docker]
 
                 file = /var/log/docker
@@ -317,8 +179,6 @@ Resources:
                 datetime_format = %Y-%m-%dT%H:%M:%S.%f
 
                 initial_position = start_of_file
-
-
 
                 [/var/log/ecs/ecs-init.log]
 
@@ -332,8 +192,6 @@ Resources:
 
                 initial_position = start_of_file
 
-
-
                 [/var/log/ecs/ecs-agent.log]
 
                 file = /var/log/ecs/ecs-agent.log.*
@@ -345,8 +203,6 @@ Resources:
                 datetime_format = %Y-%m-%dT%H:%M:%SZ
 
                 initial_position = start_of_file
-
-
 
                 [/var/log/ecs/audit.log]
 
@@ -363,11 +219,9 @@ Resources:
                 EOF
 
 
-
                 cd /tmp && curl -sO https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py
 
                 python /tmp/awslogs-agent-setup.py -n -r ${AWS::Region} -c /tmp/awslogs.conf
-
 
 
                 cat <<EOF > /etc/init/cloudwatch-logs-start.conf
@@ -406,7 +260,6 @@ Resources:
                 EOF
 
 
-
                 cat <<EOF > /etc/init/spot-instance-termination-notice-handler.conf
 
                 description "Start spot instance termination handler monitoring script"
@@ -431,7 +284,6 @@ Resources:
                 end script
 
                 EOF
-
 
 
                 cat <<EOF > /usr/local/bin/spot-instance-termination-notice-handler.sh
@@ -488,18 +340,26 @@ Resources:
                 EOF
 
 
-
                 chmod +x /usr/local/bin/spot-instance-termination-notice-handler.sh
 
                 yum -y update
+
                 yum -y install httpd php mysql php-mysql
+
                 chkconfig httpd on
+
                 service httpd start
+
                 if [ ! -f /var/www/html/lab-app.tgz ]; then
+
                 cd /var/www/html
+
                 curl -o lab-app.tgz https://s3-ap-southeast-2.amazonaws.com/sydney-public-data/lab-app.tgz
+
                 tar xvfz lab-app.tgz
+
                 chown apache:root /var/www/html/rds.conf.php
+
                 fi
                 
                 '
@@ -574,17 +434,4 @@ Resources:
       - arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetRole
       Path: /
     Type: AWS::IAM::Role
-  vpc:
-    Properties:
-      CidrBlock:
-        Fn::FindInMap:
-        - CidrMappings
-        - vpc
-        - CIDR
-      EnableDnsHostnames: true
-      EnableDnsSupport: true
-      Tags:
-      - Key: Name
-        Value: VPC for ECS on EC2 Spot fleet
-    Type: AWS::EC2::VPC
 ...
