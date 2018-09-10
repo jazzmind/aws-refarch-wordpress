@@ -25,6 +25,7 @@ Metadata:
         - PHPIniOverride
         - EC2KeyName
         - WebInstanceType
+        - EC2SpotPrice
         - WebAsgMax
         - WebAsgMin
         - WebSecurityGroup
@@ -88,6 +89,8 @@ Metadata:
         default: Web ASG Min
       WebInstanceType:
         default: Web Instance Type
+      EC2SpotPrice:
+        default: Web Tier Instance Spot Price
       WebSecurityGroup:
         default: Web Security Group
       WPAdminEmail:

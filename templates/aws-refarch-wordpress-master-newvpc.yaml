@@ -87,6 +87,7 @@ Metadata:
         - WebInstanceType
         - WebAsgMax
         - WebAsgMin
+        - EC2SpotPrice
     - Label:
         default: WordPress
       Parameters:
@@ -162,6 +163,8 @@ Metadata:
         default: Web ASG Min
       WebInstanceType:
         default: Web Tier Instance Type
+      EC2SpotPrice:
+        default: Web Tier Instance Spot Price
       WPTitle:
         default: Site Title
       WPAdminUsername:
@@ -456,6 +459,10 @@ Parameters:
     ConstraintDescription: Must be a valid Amazon EC2 instance type.
     Default: t2.small
     Description: The Amazon EC2 instance type for your web instances.
+    Type: String
+  EC2SpotPrice:
+    Default: 0.009
+    Description: Specifies the spot price of EC2 instances in the Web Autoscaling Group.
     Type: String
   WPAdminPassword:
     AllowedPattern: ^([a-zA-Z0-9`~!#$%^&*()_+,\\-])*$
@@ -919,6 +926,8 @@ Resources:
           !Ref WebAsgMin
         WebInstanceType:
           !Ref WebInstanceType
+        EC2SpotPrice:
+          !Ref EC2SpotPrice
         WebSecurityGroup:
           !GetAtt [ securitygroups, Outputs.WebSecurityGroup ]
         DatabaseRestoreSnapshot:
