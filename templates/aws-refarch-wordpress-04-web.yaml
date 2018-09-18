@@ -890,6 +890,7 @@ Resources:
         configSets:
           deploy_webserver:
             - install_webserver
+            - enable_remoteip_mode
             - build_cacheclient
             - build_wordpress
             - build_opcache
@@ -935,6 +936,21 @@ Resources:
           commands:
             create_site_conf:
               command: ./create_site_conf.sh
+              cwd: /tmp
+              ignoreErrors: false
+        enable_remoteip_mode:
+          files:
+            /tmp/enable_remoteip.sh:
+              content:
+                !Sub |
+                  #!/bin/bash -xe
+                  echo 'RemoteIPHeader X-Forwarded-For' >> /etc/httpd/conf/httpd.conf
+              mode: 000500
+              owner: root
+              group: root
+          commands:
+            enable_remoteip:
+              command: ./enable_remoteip.sh
               cwd: /tmp
               ignoreErrors: false
         build_cacheclient:
