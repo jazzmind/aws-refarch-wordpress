@@ -588,6 +588,16 @@ Conditions:
 
 Resources:
 
+  securitygroups:
+    Condition: AvailableAWSRegion
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        SshAccessCidr:
+          !Ref SshAccessCidr
+        Vpc:
+          !Ref VpcId
+      TemplateURL: https://s3-ap-southeast-2.amazonaws.com/sydney-public-data/wordpress-yaml/aws-refarch-wordpress-02-securitygroups.yaml
   bastion:
     Condition: AvailableAWSRegion
     DependsOn: [ securitygroups ]
@@ -903,16 +913,6 @@ Resources:
         WPDomainName:
           !Ref WPDomainName
       TemplateURL: https://s3-ap-southeast-2.amazonaws.com/sydney-public-data/wordpress-yaml/aws-refarch-wordpress-05-route53.yaml
-  securitygroups:
-    Condition: AvailableAWSRegion
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      Parameters:
-        SshAccessCidr:
-          !Ref SshAccessCidr
-        Vpc:
-          !Ref VpcId
-      TemplateURL: https://s3-ap-southeast-2.amazonaws.com/sydney-public-data/wordpress-yaml/aws-refarch-wordpress-02-securitygroups.yaml
   web:
     Condition: AvailableAWSRegion
     DependsOn: [ efsfilesystem, publicalb, securitygroups ]
