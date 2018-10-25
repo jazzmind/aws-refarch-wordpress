@@ -997,7 +997,6 @@ Resources:
           !Ref WPTitle
         WPVersion:
           !Ref WPVersion
-      #TemplateURL: https://s3-ap-southeast-2.amazonaws.com/sydney-public-data/wordpress-yaml/aws-refarch-wordpress-04-web.yaml
       TemplateURL: https://s3-ap-southeast-2.amazonaws.com/sydney-public-data/wordpress-yaml/aws-refarch-wordpress-04-web.yaml
 
 Outputs:
